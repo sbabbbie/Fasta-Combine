@@ -1,0 +1,468 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FASTA Combiner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: same bench as the Primer Trimmer — files + options on the left, name preview + combined output on the right; stacks on phones. */
+:root {
+  --bg: #F3F6F7; --surface: #FFFFFF; --sunken: #EAEFF1; --ink: #15212B; --muted: #5A6874; --line: #D5DDE2;
+  --accent: #1D5CA8; --accent-ink: #FFFFFF; --accent-soft: #DCE7F6;
+  --ok: #1B7443; --ok-bg: #E1F3E8; --warn: #9A5800; --warn-bg: #FCEFD8; --bad: #B42318; --bad-bg: #FBE3E1;
+  --f-display: "Bricolage Grotesque", "IBM Plex Sans", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0E1418; --surface: #151D23; --sunken: #1B252C; --ink: #E4EBEF; --muted: #97A5B0; --line: #2B3740;
+  --accent: #6EA8F0; --accent-ink: #0E1418; --accent-soft: #1B3350;
+  --ok: #4FC48B; --ok-bg: #173226; --warn: #E6A84C; --warn-bg: #3A2C14; --bad: #F2786D; --bad-bg: #3F1C1A;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0E1418; --surface: #151D23; --sunken: #1B252C; --ink: #E4EBEF; --muted: #97A5B0; --line: #2B3740;
+  --accent: #6EA8F0; --accent-ink: #0E1418; --accent-soft: #1B3350;
+  --ok: #4FC48B; --ok-bg: #173226; --warn: #E6A84C; --warn-bg: #3A2C14; --bad: #F2786D; --bad-bg: #3F1C1A;
+  color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 56px; }
+@media (max-width: 480px) { .wrap { padding-inline: 16px; } }
+
+header.top { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 24px; margin-bottom: 22px; }
+h1 { font-family: var(--f-display); font-weight: 700; font-size: clamp(26px, 4vw, 34px); letter-spacing: -0.01em; margin: 0; line-height: 1.1; text-wrap: balance; }
+h1 .dir { font-family: var(--f-mono); font-weight: 500; font-size: 0.42em; letter-spacing: 0; vertical-align: middle; margin-left: 10px; color: var(--muted); }
+.lede { margin: 6px 0 0; color: var(--muted); max-width: 66ch; }
+.top-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 20px; align-items: start; }
+@media (max-width: 900px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.panel h2 { font-family: var(--f-display); font-weight: 600; font-size: 17px; margin: 0; }
+.label { display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+
+.drop { border: 2px dashed var(--line); border-radius: 10px; padding: 26px 16px; text-align: center; background: var(--bg); cursor: pointer; transition: border-color .15s, background .15s; }
+.drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.drop strong { display: block; font-family: var(--f-display); font-size: 18px; font-weight: 600; margin-bottom: 2px; }
+.drop span { color: var(--muted); font-size: 13.5px; }
+.drop .exts { display: block; margin-top: 6px; font-family: var(--f-mono); font-size: 12px; }
+
+.folder-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: -4px; }
+.folder-note { font-size: 13px; color: var(--muted); }
+.files { display: flex; flex-direction: column; gap: 6px; }
+.file { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; min-width: 0; }
+.file .fname { font-family: var(--f-mono); font-size: 13px; overflow-wrap: anywhere; flex: 1; min-width: 0; }
+.file .fcount { font-size: 12.5px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.file.skip .fcount { color: var(--bad); }
+.file button { border: 0; background: transparent; color: var(--muted); font-size: 18px; line-height: 1; padding: 2px 6px; border-radius: 5px; }
+.file button:hover { color: var(--bad); background: var(--bad-bg); }
+.files-head { display: flex; justify-content: space-between; align-items: baseline; }
+.linkbtn { border: 0; background: none; color: var(--accent); font-size: 13px; padding: 0; }
+
+details.paste summary { cursor: pointer; font-size: 14px; font-weight: 500; }
+details.paste textarea { margin-top: 8px; min-height: 110px; }
+.paste-row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; align-items: center; }
+.paste-row input { flex: 1; min-width: 140px; }
+
+input[type=text], textarea, select { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; width: 100%; }
+textarea { font-family: var(--f-mono); font-size: 13px; resize: vertical; line-height: 1.45; }
+input:focus-visible, textarea:focus-visible, select:focus-visible, button:focus-visible, summary:focus-visible, .drop:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.opts { border-top: 1px solid var(--line); padding-top: 14px; display: flex; flex-direction: column; gap: 12px; }
+.check { display: flex; gap: 9px; align-items: flex-start; font-size: 14px; cursor: pointer; }
+.check input { margin-top: 3px; accent-color: var(--accent); width: 16px; height: 16px; flex: none; }
+.check small { display: block; color: var(--muted); font-size: 12.5px; }
+.row2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; }
+@media (max-width: 480px) { .row2 { grid-template-columns: minmax(0, 1fr); } }
+.gbex { font-family: var(--f-mono); font-size: 12px; color: var(--muted); margin-top: 4px; overflow-wrap: anywhere; }
+
+button { font: inherit; cursor: pointer; border-radius: 7px; }
+.btn { border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 7px 13px; font-size: 14px; font-weight: 500; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.primary:hover { filter: brightness(1.08); }
+
+.summary { display: flex; flex-wrap: wrap; gap: 8px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; padding: 3px 10px; border-radius: 999px; background: var(--sunken); }
+.pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.pill.ok { background: var(--ok-bg); color: var(--ok); }
+.pill.warn { background: var(--warn-bg); color: var(--warn); }
+.pill.bad { background: var(--bad-bg); color: var(--bad); }
+.example-note { font-size: 13px; color: var(--muted); }
+.example-note b { color: var(--warn); font-weight: 600; }
+
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; max-height: 420px; overflow-y: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th { position: sticky; top: 0; background: var(--sunken); text-align: left; font-size: 11.5px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 7px 10px; white-space: nowrap; }
+td { padding: 7px 10px; border-top: 1px solid var(--line); vertical-align: top; }
+td.nm { font-family: var(--f-mono); font-size: 12.5px; overflow-wrap: anywhere; min-width: 180px; }
+td.nm .was { display: block; color: var(--muted); font-size: 11.5px; margin-top: 2px; }
+td.src { color: var(--muted); font-family: var(--f-mono); font-size: 12px; white-space: nowrap; }
+td.len { font-family: var(--f-mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+tr.dropped td { opacity: 0.55; }
+tr.dropped td.nm { text-decoration: line-through; }
+.chip { display: inline-block; font-size: 12px; padding: 1px 7px; border-radius: 5px; margin: 0 4px 3px 0; white-space: nowrap; }
+.chip.warn { background: var(--warn-bg); color: var(--warn); }
+.chip.bad { background: var(--bad-bg); color: var(--bad); }
+.chip.info { background: var(--sunken); color: var(--ink); }
+
+.out-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; }
+.out-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.out-actions input { width: 190px; font-family: var(--f-mono); font-size: 13px; padding: 6px 9px; }
+#out { min-height: 200px; }
+.toast { font-size: 13px; color: var(--ok); }
+.empty { color: var(--muted); font-size: 14px; padding: 18px; text-align: center; border: 1px dashed var(--line); border-radius: 8px; }
+.help { font-size: 13.5px; color: var(--muted); }
+.help summary { cursor: pointer; color: var(--ink); font-weight: 500; }
+.help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>FASTA Combiner <span class="dir">many → one</span></h1>
+      <p class="lede">Drop in your own sequence files and your GenBank downloads. They're merged into one clean FASTA file, with duplicate names fixed and long GenBank headers shortened. Files never leave your computer.</p>
+    </div>
+    <div class="top-actions">
+      <button class="btn" id="btnExample" type="button">Load example</button>
+      <button class="btn" id="btnClearTop" type="button">Clear all</button>
+    </div>
+  </header>
+
+  <div class="grid">
+    <section class="panel" aria-label="Files and options">
+      <div class="drop" id="drop" tabindex="0" role="button" aria-label="Add sequence files">
+        <strong>Drop files or a whole folder here</strong>
+        <span>or click to choose files. Select as many as you like.</span>
+        <span class="exts">.fasta .fas .fa .fna .txt .seq</span>
+      </div>
+      <input type="file" id="picker" multiple hidden accept=".fasta,.fas,.fa,.fna,.ffn,.faa,.txt,.seq,.fsa,text/plain">
+      <input type="file" id="folderPicker" webkitdirectory multiple hidden>
+      <div class="folder-row"><button class="btn" id="btnFolder" type="button">Choose a folder</button><span class="folder-note" id="folderNote">Adds every sequence file inside, including subfolders.</span></div>
+
+      <div>
+        <div class="files-head"><span class="label">Files, in output order</span><button class="linkbtn" id="btnClear" type="button">Remove all</button></div>
+        <div class="files" id="files"></div>
+      </div>
+
+      <details class="paste">
+        <summary>Paste sequences instead</summary>
+        <textarea id="pasteBox" spellcheck="false" placeholder=">my_sequence&#10;ACGT..."></textarea>
+        <div class="paste-row">
+          <input type="text" id="pasteName" placeholder="Label, e.g. trimmed sequences" autocomplete="off">
+          <button class="btn" id="btnPaste" type="button">Add</button>
+        </div>
+      </details>
+
+      <div class="opts">
+        <label class="check"><input type="checkbox" id="optGB" checked><span>Shorten GenBank headers<small>Keeps the accession and species name, drops the rest.</small></span></label>
+        <div id="gbFmtWrap">
+          <label class="label" for="gbFmt">Short name format</label>
+          <select id="gbFmt">
+            <option value="sp_acc">Species_accession</option>
+            <option value="acc_sp">Accession_species</option>
+            <option value="acc">Accession only</option>
+          </select>
+          <div class="gbex" id="gbEx"></div>
+        </div>
+        <label class="check"><input type="checkbox" id="optClean" checked><span>Replace spaces and symbols in names with _<small>Tree programs can cut names at spaces or choke on ( ) : , ;</small></span></label>
+        <label class="check"><input type="checkbox" id="optDupe" checked><span>Remove exact duplicates<small>Same name and same sequence, e.g. a file added twice.</small></span></label>
+        <label class="check"><input type="checkbox" id="optGaps"><span>Remove gaps (-)<small>Turn on if you're combining previously aligned sequences to realign them.</small></span></label>
+        <div class="row2">
+          <label class="check"><input type="checkbox" id="optUpper" checked><span>Uppercase bases</span></label>
+          <label class="check"><input type="checkbox" id="optSort"><span>Sort A → Z by name</span></label>
+        </div>
+      </div>
+
+      <details class="help">
+        <summary>Good to know</summary>
+        <ul>
+          <li>A file with no &gt; header line (like a .seq file from the sequencing facility) is named after the file.</li>
+          <li>Chromatogram files (.ab1) and Word documents can't be read. Export the sequence as FASTA first.</li>
+          <li>Two different sequences with the same name get _2, _3 added so every name is unique.</li>
+          <li>Letters that aren't DNA bases are flagged but left in, so you can decide what to do.</li>
+        </ul>
+      </details>
+    </section>
+
+    <section class="panel" aria-label="Combined output">
+      <div class="out-head">
+        <h2>Sequences</h2>
+        <div class="summary" id="summary"></div>
+      </div>
+      <div class="example-note" id="exampleNote" hidden><b>Example data.</b> Made-up files showing a student FASTA, a GenBank download and a .seq file. Remove them and add your own.</div>
+      <div id="tableHost"></div>
+
+      <div class="out-head">
+        <h2>Combined FASTA</h2>
+        <div class="out-actions">
+          <span class="toast" id="toast" role="status"></span>
+          <input type="text" id="outName" value="combined_sequences.fasta" aria-label="File name" spellcheck="false">
+          <button class="btn" id="btnCopy" type="button">Copy</button>
+          <button class="btn primary" id="btnDl" type="button">Download</button>
+        </div>
+      </div>
+      <textarea id="out" readonly spellcheck="false" aria-label="Combined FASTA"></textarea>
+    </section>
+  </div>
+</div>
+
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+  const IUPAC = /[^ACGTURYSWKMBDHVN\-?]/gi;
+  let sources = []; // {id, name, records:[{header, seq, fromFile}], skip: reason|null}
+  let nextId = 1, isExample = false;
+
+  // ---------- parsing ----------
+  function looksBinary(text) {
+    const sample = text.slice(0, 2000);
+    if (sample.indexOf('\u0000') !== -1) return true;
+    let odd = 0;
+    for (let i = 0; i < sample.length; i++) { const c = sample.charCodeAt(i); if ((c < 9) || (c > 13 && c < 32) || c === 65533) odd++; }
+    return sample.length > 0 && odd / sample.length > 0.05;
+  }
+  function parse(text, fileName) {
+    text = text.replace(/^﻿/, '').replace(/\r\n?/g, '\n');
+    const recs = []; let cur = null;
+    for (const line of text.split('\n')) {
+      const t = line.trim();
+      if (!t || t.startsWith(';')) continue;
+      if (t.startsWith('>')) { cur = { header: t.slice(1).trim(), seq: '' }; recs.push(cur); }
+      else {
+        if (!cur) { cur = { header: fileName.replace(/\.[^.]+$/, ''), seq: '', fromFile: true }; recs.push(cur); }
+        cur.seq += t.replace(/[\s\d]/g, '');
+      }
+    }
+    return recs;
+  }
+  const SEQ_EXT = /\.(fasta|fas|fa|fna|ffn|faa|fsa|fasta\.txt|txt|seq)$/i;
+  const byName = (a, b) => a._path.localeCompare(b._path, undefined, { numeric: true });
+  // Files that came from a folder: keep only sequence files, skip hidden/system files
+  function filterFolder(files) {
+    const keep = [], ignored = [];
+    files.forEach(f => {
+      const base = f.name;
+      if (base.startsWith('.') || base.startsWith('~$') || /^(thumbs\.db|desktop\.ini)$/i.test(base)) return;
+      (SEQ_EXT.test(base) ? keep : ignored).push(f);
+    });
+    return { keep: keep.sort(byName), ignored };
+  }
+  function readAllEntries(dirEntry) {
+    return new Promise(resolve => {
+      const reader = dirEntry.createReader(), all = [];
+      const next = () => reader.readEntries(batch => { if (!batch.length) resolve(all); else { all.push(...batch); next(); } }, () => resolve(all));
+      next();
+    });
+  }
+  async function walk(entry, prefix, out) {
+    if (entry.isFile) {
+      const f = await new Promise(res => entry.file(res, () => res(null)));
+      if (f) { f._path = prefix + f.name; out.push(f); }
+    } else if (entry.isDirectory) {
+      for (const child of await readAllEntries(entry)) await walk(child, prefix + entry.name + '/', out);
+    }
+  }
+  async function handleDrop(dt) {
+    const items = dt.items ? [...dt.items].filter(i => i.kind === 'file') : [];
+    const entries = items.map(i => i.webkitGetAsEntry ? i.webkitGetAsEntry() : null);
+    if (!entries.length || entries.some(e => !e)) { addFiles([...dt.files].map(f => (f._path = f.name, f))); return; }
+    const loose = [], fromFolders = [];
+    for (const e of entries) {
+      if (e.isFile) { const f = await new Promise(res => e.file(res, () => res(null))); if (f) { f._path = f.name; loose.push(f); } }
+      else await walk(e, '', fromFolders);
+    }
+    const { keep, ignored } = filterFolder(fromFolders);
+    await addFiles(loose.concat(keep));
+    if (fromFolders.length) folderMsg(keep.length, ignored.length);
+  }
+  function folderMsg(n, ign) {
+    $('folderNote').textContent = n
+      ? `Added ${n} sequence file${n === 1 ? '' : 's'} from the folder${ign ? `; ignored ${ign} other file${ign === 1 ? '' : 's'}` : ''}.`
+      : `No sequence files found in that folder${ign ? ` (${ign} other file${ign === 1 ? '' : 's'} ignored)` : ''}.`;
+  }
+  async function addFiles(fileList) {
+    for (const f of fileList) {
+      const src = { id: nextId++, name: f._path || f.webkitRelativePath || f.name, records: [], skip: null };
+      if (/\.(ab1|abi|scf|docx?|pdf|xlsx?|zip)$/i.test(f.name)) src.skip = 'not a text sequence file';
+      else {
+        try {
+          const text = await f.text();
+          if (looksBinary(text)) src.skip = 'not a text sequence file';
+          else { src.records = parse(text, f.name); if (!src.records.length) src.skip = 'no sequences found'; }
+        } catch (e) { src.skip = 'could not be read'; }
+      }
+      sources.push(src);
+    }
+    if (isExample) { sources = sources.filter(s => !s.example); isExample = false; }
+    render();
+  }
+
+  // ---------- naming ----------
+  const GB = /^([A-Z]{1,2}_?\d{5,9}(?:\.\d+)?)\s+(.*)$/;
+  function gbShort(header, fmt) {
+    const m = header.match(GB);
+    if (!m) return null;
+    const acc = m[1];
+    const words = m[2].replace(/^UNVERIFIED:\s*/i, '').replace(/^PREDICTED:\s*/i, '').split(/\s+/);
+    let sp = '';
+    if (/^[A-Z][a-z]+$/.test(words[0] || '') && words[1]) {
+      sp = words[0] + '_' + words[1].replace(/[^A-Za-z0-9.-]/g, '');
+      if (/^(sp|cf|aff|nr)\.?$/.test(words[1]) && words[2]) sp = words[0] + '_' + words[1].replace('.', '') + '_' + words[2].replace(/[^A-Za-z0-9.-]/g, '');
+    }
+    if (fmt === 'acc' || !sp) return acc;
+    return fmt === 'sp_acc' ? sp + '_' + acc : acc + '_' + sp;
+  }
+  const clean = s => s.replace(/[\s()\[\]{}:;,'"|=\/\\<>*!?#&]+/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '') || 'unnamed';
+
+  // ---------- build ----------
+  function build() {
+    const o = { gb: $('optGB').checked, fmt: $('gbFmt').value, clean: $('optClean').checked, dupe: $('optDupe').checked,
+                gaps: $('optGaps').checked, upper: $('optUpper').checked, sort: $('optSort').checked };
+    let rows = [];
+    sources.forEach(src => {
+      if (src.skip) return;
+      src.records.forEach(r => {
+        let seq = r.seq;
+        if (o.gaps) seq = seq.replace(/-/g, '');
+        if (o.upper) seq = seq.toUpperCase();
+        let name = r.header, gbHit = false;
+        if (o.gb) { const g = gbShort(r.header, o.fmt); if (g) { name = g; gbHit = true; } }
+        if (o.clean) name = clean(name);
+        const flags = [];
+        if (r.fromFile) flags.push(['info', 'named from file']);
+        if (!seq.length) flags.push(['bad', 'empty, left out']);
+        const bad = [...new Set((seq.match(IUPAC) || []).map(c => c.toUpperCase()))];
+        if (bad.length) flags.push(['warn', 'odd characters: ' + bad.join(' ')]);
+        rows.push({ name, orig: r.header, seq, src: src.name, flags, gbHit, dropped: !seq.length });
+      });
+    });
+    // exact duplicates
+    if (o.dupe) {
+      const seen = new Set();
+      rows.forEach(r => { if (r.dropped) return; const k = r.name + '\u0001' + r.seq.toUpperCase(); if (seen.has(k)) { r.dropped = true; r.flags.push(['info', 'duplicate, removed']); } else seen.add(k); });
+    }
+    if (o.sort) rows = rows.slice().sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    // unique names
+    const used = new Map();
+    rows.forEach(r => { if (!r.dropped) used.set(r.name, (used.get(r.name) || 0) + 1); });
+    const counter = new Map(), taken = new Set();
+    rows.forEach(r => {
+      if (r.dropped) return;
+      if (used.get(r.name) > 1) {
+        let n = (counter.get(r.name) || 0) + 1; counter.set(r.name, n);
+        if (n > 1) { let nn = r.name + '_' + n; while (taken.has(nn) || used.has(nn)) nn += '_'; r.flags.push(['warn', 'renamed, name was already used']); r.name = nn; }
+      }
+      taken.add(r.name);
+    });
+    return rows;
+  }
+
+  // ---------- render ----------
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' })[c]);
+  function render() {
+    // file list
+    $('files').innerHTML = sources.length ? sources.map(s => `
+      <div class="file${s.skip ? ' skip' : ''}"><span class="fname">${esc(s.name)}</span>
+      <span class="fcount">${s.skip ? 'skipped: ' + s.skip : s.records.length + ' seq' + (s.records.length === 1 ? '' : 's')}</span>
+      <button type="button" data-rm="${s.id}" aria-label="Remove ${esc(s.name)}">×</button></div>`).join('')
+      : '<div class="empty">No files yet. Drop some in above.</div>';
+    $('exampleNote').hidden = !isExample;
+    $('gbFmtWrap').hidden = !$('optGB').checked;
+    const exH = 'MN123456.1 Aedes aegypti isolate X12 cytochrome oxidase subunit I (COI) gene, partial cds';
+    $('gbEx').textContent = 'e.g. ' + (gbShort(exH, $('gbFmt').value));
+
+    const rows = build();
+    const kept = rows.filter(r => !r.dropped);
+    const nFiles = sources.filter(s => !s.skip).length, nSkip = sources.filter(s => s.skip).length;
+    const nFlag = rows.filter(r => r.flags.some(f => f[0] !== 'info')).length;
+    const nGB = kept.filter(r => r.gbHit).length;
+    const pills = [];
+    if (sources.length) pills.push(`<span class="pill ok">${kept.length} sequence${kept.length === 1 ? '' : 's'} from ${nFiles} file${nFiles === 1 ? '' : 's'}</span>`);
+    if (nGB) pills.push(`<span class="pill">${nGB} GenBank header${nGB === 1 ? '' : 's'} shortened</span>`);
+    if (nFlag) pills.push(`<span class="pill warn">${nFlag} to check</span>`);
+    if (nSkip) pills.push(`<span class="pill bad">${nSkip} file${nSkip === 1 ? '' : 's'} skipped</span>`);
+    $('summary').innerHTML = pills.join('');
+
+    if (!rows.length) { $('tableHost').innerHTML = '<div class="empty">Sequences from your files will be listed here with their final names.</div>'; $('out').value = ''; return; }
+    $('tableHost').innerHTML = `<div class="tablewrap"><table><thead><tr><th>Name in output</th><th>From file</th><th style="text-align:right">Length</th><th>Notes</th></tr></thead><tbody>${
+      rows.map(r => `<tr class="${r.dropped ? 'dropped' : ''}"><td class="nm">${esc(r.name)}${r.name !== r.orig ? `<span class="was">was: ${esc(r.orig)}</span>` : ''}</td>
+        <td class="src">${esc(r.src)}</td><td class="len">${r.seq.length} bp</td>
+        <td>${r.flags.map(f => `<span class="chip ${f[0]}">${esc(f[1])}</span>`).join('')}</td></tr>`).join('')
+    }</tbody></table></div>`;
+    $('out').value = kept.map(r => '>' + r.name + '\n' + r.seq).join('\n') + (kept.length ? '\n' : '');
+  }
+
+  // ---------- example ----------
+  function loadExample() {
+    const mk = (name, text) => ({ id: nextId++, name, records: parse(text, name), skip: null, example: true });
+    sources = [
+      mk('BIO340_group3.fasta', '>Specimen_01 COI\nAACATTATATTTTATTTTTGGAATTTGAGCAGGAATAGTAGGAACTTCTTTAAGATTATTAATTCGAGCAGAATTAGGTAATCCAGG\n>Specimen_02 COI\nTACTTTATATTTTATTTTTGGTGCTTGAGCAGGAATAGTTGGAACCTCTTTAAGATTATTAATTCGAGCTGAACTAGGAAACCCC\n'),
+      mk('sequence.fasta', '>MN123456.1 Aedes aegypti isolate AE-14 cytochrome c oxidase subunit I (COI) gene, partial cds; mitochondrial\nAACTTTATATTTTATTTTTGGAGCTTGAGCTGGAATAGTAGGAACTTCTTTAAGAATTTTAATTCGAGCTGAATTAGGACATCC\n>OQ998812.1 Culex pipiens voucher CP-7 cytochrome oxidase subunit 1 (COI) gene, partial cds; mitochondrial\nAACTTTATATTTTATTTTTGGAGCTTGAGCTGGAATAGTAGGAACTTCTTTAAGAATTTTAATTCGAGCTGAATTAGGACATCC\n>PP401120.1 UNVERIFIED: Anopheles sp. ANO3 cytochrome c oxidase subunit I (COI) gene, partial cds\nAATTTTATATTTTATTTTTGGAGCATGAGCAGGAATAGTAGGAACATCATTAAGAATTTTAATTCGAGCTGAATTAGGACAACC\n'),
+      mk('Specimen_03_F.seq', 'AACATTATACTTTATTTTTGGAATTTGAGCAGGAATAGTAGGAACTTCTTTAAGATTATTAATTCGAGCAGAATTAGGTAATCCAGG\n'),
+      mk('BIO340_group3.fasta', '>Specimen_01 COI\nAACATTATATTTTATTTTTGGAATTTGAGCAGGAATAGTAGGAACTTCTTTAAGATTATTAATTCGAGCAGAATTAGGTAATCCAGG\n')
+    ];
+    isExample = true; render();
+  }
+
+  // ---------- events ----------
+  const drop = $('drop'), picker = $('picker');
+  drop.addEventListener('click', () => picker.click());
+  drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); picker.click(); } });
+  picker.addEventListener('change', () => { addFiles([...picker.files]); picker.value = ''; });
+  ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, () => drop.classList.remove('over')));
+  drop.addEventListener('drop', e => { e.preventDefault(); e.stopPropagation(); handleDrop(e.dataTransfer); });
+  window.addEventListener('dragover', e => e.preventDefault());
+  window.addEventListener('drop', e => { e.preventDefault(); if (e.dataTransfer && e.dataTransfer.files.length) handleDrop(e.dataTransfer); });
+  $('btnFolder').addEventListener('click', () => $('folderPicker').click());
+  $('folderPicker').addEventListener('change', async () => {
+    const files = [...$('folderPicker').files].map(f => (f._path = f.webkitRelativePath || f.name, f));
+    const { keep, ignored } = filterFolder(files);
+    await addFiles(keep); folderMsg(keep.length, ignored.length);
+    $('folderPicker').value = '';
+  });
+
+  $('files').addEventListener('click', e => { const id = e.target.getAttribute('data-rm'); if (id) { sources = sources.filter(s => s.id !== +id); if (!sources.some(s => s.example)) isExample = false; render(); } });
+  const clearAll = () => { sources = []; isExample = false; render(); };
+  $('btnClear').addEventListener('click', clearAll); $('btnClearTop').addEventListener('click', clearAll);
+  $('btnExample').addEventListener('click', loadExample);
+  $('btnPaste').addEventListener('click', () => {
+    const txt = $('pasteBox').value; if (!txt.trim()) return;
+    const label = $('pasteName').value.trim() || 'pasted sequences';
+    if (isExample) { sources = []; isExample = false; }
+    sources.push({ id: nextId++, name: label, records: parse(txt, label), skip: null });
+    $('pasteBox').value = ''; $('pasteName').value = ''; render();
+  });
+  ['optGB', 'gbFmt', 'optClean', 'optDupe', 'optGaps', 'optUpper', 'optSort'].forEach(id => $(id).addEventListener('change', render));
+
+  const toast = msg => { const t = $('toast'); t.textContent = msg; clearTimeout(t._t); t._t = setTimeout(() => t.textContent = '', 3000); };
+  $('btnCopy').addEventListener('click', () => {
+    const out = $('out'); if (!out.value) { toast('Nothing to copy yet'); return; }
+    const fb = () => { out.focus(); out.select(); toast('Selected. Press Ctrl+C (⌘C on Mac).'); };
+    try { navigator.clipboard.writeText(out.value).then(() => toast('Copied'), fb); } catch (e) { fb(); }
+  });
+  $('btnDl').addEventListener('click', () => {
+    const txt = $('out').value; if (!txt) { toast('Add some files first'); return; }
+    let name = $('outName').value.trim() || 'combined_sequences.fasta';
+    if (!/\.[A-Za-z0-9]+$/.test(name)) name += '.fasta';
+    try {
+      const url = URL.createObjectURL(new Blob([txt], { type: 'text/plain' }));
+      const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      toast('Downloading ' + name);
+    } catch (e) { toast('Download blocked here. Use Copy instead.'); }
+  });
+
+  loadExample();
+})();
+</script>
+</body>
+</html>
