@@ -162,6 +162,7 @@ tr.dropped td.nm { text-decoration: line-through; }
       </details>
 
       <div class="opts">
+        <label class="check"><input type="checkbox" id="optFileName"><span>Name each sequence after its file<small>For files holding one sequence, e.g. Specimen_07.fasta with header &gt;Contig1 becomes &gt;Specimen_07. Files with several sequences and GenBank records keep their headers.</small></span></label>
         <label class="check"><input type="checkbox" id="optGB" checked><span>Shorten GenBank headers<small>Keeps the accession and species name, drops the rest.</small></span></label>
         <div id="gbFmtWrap">
           <label class="label" for="gbFmt">Short name format</label>
@@ -237,7 +238,7 @@ tr.dropped td.nm { text-decoration: line-through; }
       if (!t || t.startsWith(';')) continue;
       if (t.startsWith('>')) { cur = { header: t.slice(1).trim(), seq: '' }; recs.push(cur); }
       else {
-        if (!cur) { cur = { header: fileName.replace(/\.[^.]+$/, ''), seq: '', fromFile: true }; recs.push(cur); }
+        if (!cur) { cur = { header: fileBase(fileName), seq: '', fromFile: true }; recs.push(cur); }
         cur.seq += t.replace(/[\s\d]/g, '');
       }
     }
@@ -320,11 +321,12 @@ tr.dropped td.nm { text-decoration: line-through; }
     if (fmt === 'acc' || !sp) return acc;
     return fmt === 'sp_acc' ? sp + '_' + acc : acc + '_' + sp;
   }
+  const fileBase = p => p.split('/').pop().replace(/(\.(fasta|fas|fa|fna|ffn|faa|fsa|seq|txt))+$/i, '') || p;
   const clean = s => s.replace(/[\s()\[\]{}:;,'"|=\/\\<>*!?#&]+/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '') || 'unnamed';
 
   // ---------- build ----------
   function build() {
-    const o = { gb: $('optGB').checked, fmt: $('gbFmt').value, clean: $('optClean').checked, dupe: $('optDupe').checked,
+    const o = { fileName: $('optFileName').checked, gb: $('optGB').checked, fmt: $('gbFmt').value, clean: $('optClean').checked, dupe: $('optDupe').checked,
                 gaps: $('optGaps').checked, upper: $('optUpper').checked, sort: $('optSort').checked };
     let rows = [];
     sources.forEach(src => {
@@ -334,10 +336,12 @@ tr.dropped td.nm { text-decoration: line-through; }
         if (o.gaps) seq = seq.replace(/-/g, '');
         if (o.upper) seq = seq.toUpperCase();
         let name = r.header, gbHit = false;
-        if (o.gb) { const g = gbShort(r.header, o.fmt); if (g) { name = g; gbHit = true; } }
+        const useFile = o.fileName && !src.pasted && !r.fromFile && src.records.length === 1 && !GB.test(r.header);
+        if (useFile) { name = fileBase(src.name); }
+        else if (o.gb) { const g = gbShort(r.header, o.fmt); if (g) { name = g; gbHit = true; } }
         if (o.clean) name = clean(name);
         const flags = [];
-        if (r.fromFile) flags.push(['info', 'named from file']);
+        if (r.fromFile || useFile) flags.push(['info', 'named from file']);
         if (!seq.length) flags.push(['bad', 'empty, left out']);
         const bad = [...new Set((seq.match(IUPAC) || []).map(c => c.toUpperCase()))];
         if (bad.length) flags.push(['warn', 'odd characters: ' + bad.join(' ')]);
@@ -438,10 +442,10 @@ tr.dropped td.nm { text-decoration: line-through; }
     const txt = $('pasteBox').value; if (!txt.trim()) return;
     const label = $('pasteName').value.trim() || 'pasted sequences';
     if (isExample) { sources = []; isExample = false; }
-    sources.push({ id: nextId++, name: label, records: parse(txt, label), skip: null });
+    sources.push({ id: nextId++, name: label, records: parse(txt, label), skip: null, pasted: true });
     $('pasteBox').value = ''; $('pasteName').value = ''; render();
   });
-  ['optGB', 'gbFmt', 'optClean', 'optDupe', 'optGaps', 'optUpper', 'optSort'].forEach(id => $(id).addEventListener('change', render));
+  ['optFileName', 'optGB', 'gbFmt', 'optClean', 'optDupe', 'optGaps', 'optUpper', 'optSort'].forEach(id => $(id).addEventListener('change', render));
 
   const toast = msg => { const t = $('toast'); t.textContent = msg; clearTimeout(t._t); t._t = setTimeout(() => t.textContent = '', 3000); };
   $('btnCopy').addEventListener('click', () => {
