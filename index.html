@@ -162,7 +162,7 @@ tr.dropped td.nm { text-decoration: line-through; }
       </details>
 
       <div class="opts">
-        <label class="check"><input type="checkbox" id="optFileName"><span>Name each sequence after its file<small>For files holding one sequence, e.g. Specimen_07.fasta with header &gt;Contig1 becomes &gt;Specimen_07. Files with several sequences and GenBank records keep their headers.</small></span></label>
+        <label class="check"><input type="checkbox" id="optFileName"><span>Name each sequence after its file<small>For files holding one sequence, e.g. Specimen_07.fasta with header &gt;Contig1 becomes &gt;Specimen_07. Works for renamed GenBank downloads too. Files with several sequences, and GenBank files still named sequence.fasta, keep their headers.</small></span></label>
         <label class="check"><input type="checkbox" id="optGB" checked><span>Shorten GenBank headers<small>Keeps the accession and species name, drops the rest.</small></span></label>
         <div id="gbFmtWrap">
           <label class="label" for="gbFmt">Short name format</label>
@@ -321,6 +321,8 @@ tr.dropped td.nm { text-decoration: line-through; }
     if (fmt === 'acc' || !sp) return acc;
     return fmt === 'sp_acc' ? sp + '_' + acc : acc + '_' + sp;
   }
+  // NCBI's default download names: sequence.fasta, sequence (1).fasta, sequence(2).fasta, sequence-3.fasta
+  const isNcbiDefault = p => /^sequence(\s*\(\d+\)|[-_ ]\d+)?$/i.test(fileBase(p));
   const fileBase = p => p.split('/').pop().replace(/(\.(fasta|fas|fa|fna|ffn|faa|fsa|seq|txt))+$/i, '') || p;
   const clean = s => s.replace(/[\s()\[\]{}:;,'"|=\/\\<>*!?#&]+/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '') || 'unnamed';
 
@@ -336,7 +338,7 @@ tr.dropped td.nm { text-decoration: line-through; }
         if (o.gaps) seq = seq.replace(/-/g, '');
         if (o.upper) seq = seq.toUpperCase();
         let name = r.header, gbHit = false;
-        const useFile = o.fileName && !src.pasted && !r.fromFile && src.records.length === 1 && !GB.test(r.header);
+        const useFile = o.fileName && !src.pasted && !r.fromFile && src.records.length === 1 && !(GB.test(r.header) && isNcbiDefault(src.name));
         if (useFile) { name = fileBase(src.name); }
         else if (o.gb) { const g = gbShort(r.header, o.fmt); if (g) { name = g; gbHit = true; } }
         if (o.clean) name = clean(name);
